@@ -181,7 +181,7 @@ export function feedbackUserPrompt(
     initialization: `Focus ONLY on whether initial values make sense. Don't evaluate the full algorithm.`,
     algorithm: `Focus ONLY on whether the high-level steps are reasonable. Minor ordering issues are fine.`,
     invariants: `Focus ONLY on whether the invariant makes sense.`,
-    complexity: `Focus ONLY on whether the complexity claim is reasonable.`,
+    complexity: `Two things must be present to mark "aligned": (1) the stated Big-O matches what an efficient approach would achieve, AND (2) the student gives a brief but valid explanation for WHY — tying the complexity to the work their approach does (e.g. "O(N log K) because we scan N nodes and each heap op is log K"). A bare "O(n)" or "O(n log n)" with no reasoning is NOT aligned — mark it "partial" and in followup_question ask them to justify the complexity by describing what drives each factor. Wrong Big-O → "off-track".`,
     dry_run: `Focus ONLY on whether the trace shows reasonable logic. Small arithmetic errors are fine.`,
   }
 
