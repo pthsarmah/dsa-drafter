@@ -41,6 +41,12 @@ export interface Draft {
   created_at: number
   updated_at: number
   gate_passed: boolean
+  code_completed: boolean
+}
+
+export interface ProblemWithProgress extends Problem {
+  draft_done: boolean
+  code_done: boolean
 }
 
 export interface DraftSection {

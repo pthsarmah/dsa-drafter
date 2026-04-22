@@ -4,6 +4,7 @@ import { getProblem, getOrCreateDraft, getSections, getReferenceSolutions } from
 import { SECTIONS } from '@/lib/draft/sections'
 import { bestComplexity } from '@/lib/draft/complexity'
 import { SectionForm } from './section-form'
+import { SourceIframe } from './source-iframe'
 import { GateBanner } from './gate-banner'
 import { ProviderToggle } from '@/app/provider-toggle'
 
@@ -110,11 +111,9 @@ export default async function DraftPage({
 						</a>
 					</div>
 					<div className="border border-rule bg-paper overflow-hidden">
-						<iframe
+						<SourceIframe
 							src={problem.url}
 							title={problem.title || 'Problem statement'}
-							className="w-full h-[72vh] bg-white"
-							referrerPolicy="no-referrer"
 						/>
 					</div>
 				</section>

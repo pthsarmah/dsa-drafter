@@ -1,5 +1,5 @@
 import { getDb } from './client'
-import type { Problem, ReferenceSolution, Draft, DraftSection, IngestStatus, Verdict, Example } from '@/lib/types'
+import type { Problem, ProblemWithProgress, ReferenceSolution, Draft, DraftSection, IngestStatus, Verdict, Example } from '@/lib/types'
 
 type BindValue = string | number | bigint | boolean | null | Uint8Array
 type Bindings = Record<string, BindValue>
@@ -52,6 +52,23 @@ export async function listProblems(): Promise<Problem[]> {
   const db = await getDb()
   const rows = await db.all<Record<string, unknown>>(`SELECT * FROM problems ORDER BY created_at DESC`)
   return rows.map(rowToProblem)
+}
+
+export async function listProblemsWithProgress(): Promise<ProblemWithProgress[]> {
+  const db = await getDb()
+  const rows = await db.all<Record<string, unknown>>(`
+    SELECT p.*,
+      COALESCE(d.gate_passed, 0) AS gate_passed,
+      COALESCE(d.code_completed, 0) AS code_completed
+    FROM problems p
+    LEFT JOIN drafts d ON d.problem_id = p.id
+    ORDER BY p.created_at DESC
+  `)
+  return rows.map((row) => ({
+    ...rowToProblem(row),
+    draft_done: Boolean(row.gate_passed),
+    code_done: Boolean(row.code_completed),
+  }))
 }
 
 function rowToProblem(row: Record<string, unknown>): Problem {
@@ -149,6 +166,7 @@ function rowToDraft(row: Record<string, unknown>): Draft {
     created_at: row.created_at as number,
     updated_at: row.updated_at as number,
     gate_passed: Boolean(row.gate_passed),
+    code_completed: Boolean(row.code_completed),
   }
 }
 

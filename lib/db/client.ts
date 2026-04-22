@@ -54,9 +54,15 @@ export async function getDb() {
       problem_id INTEGER NOT NULL UNIQUE REFERENCES problems(id) ON DELETE CASCADE,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      gate_passed INTEGER NOT NULL DEFAULT 0
+      gate_passed INTEGER NOT NULL DEFAULT 0,
+      code_completed INTEGER NOT NULL DEFAULT 0
     )
   `)
+
+  const draftCols: Array<{ name: string }> = await db.all(`PRAGMA table_info(drafts)`)
+  if (!draftCols.some((c: { name: string }) => c.name === 'code_completed')) {
+    await db.run(`ALTER TABLE drafts ADD COLUMN code_completed INTEGER NOT NULL DEFAULT 0`)
+  }
 
   await db.run(`
     CREATE TABLE IF NOT EXISTS draft_sections (
