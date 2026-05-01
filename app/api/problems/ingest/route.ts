@@ -4,6 +4,8 @@ import { verifyCandidates } from '@/lib/ingest/verify'
 import { createProblem, updateProblem, insertReferenceSolution, getProblem } from '@/lib/db/schema'
 import { resolveProvider } from '@/lib/model/chat'
 import { publish } from '@/lib/ingest/stream-bus'
+import { generateAndPersistTests } from '@/lib/coding/tests'
+import { generateAndPersistCppTemplate } from '@/lib/coding/generate-harness'
 import type { ModelProvider } from '@/lib/types'
 
 export async function POST(request: Request) {
@@ -75,6 +77,63 @@ async function runIngestion(problemId: number, url: string, provider: ModelProvi
     }
 
     const anyPassed = verified.some((v) => v.critic_ok)
+
+    // Step 5: Generate test cases for the coding phase using the best verified reference as oracle.
+    if (anyPassed) {
+      const oracle =
+        verified.find((v) => v.critic_ok && v.tests_ok) ??
+        verified.find((v) => v.critic_ok)
+      if (oracle) {
+        publish(problemId, { phase: 'tests', text: 'Generating hidden test cases…' })
+        try {
+          const result = await generateAndPersistTests({
+            problemId,
+            title: fetched.title,
+            statement: fetched.statement,
+            constraints: fetched.constraints,
+            examples: fetched.examples,
+            referenceCode: oracle.code,
+            provider,
+          })
+          publish(problemId, {
+            phase: 'tests',
+            text: `Tests ready — ${result.visibleCount} visible, ${result.hiddenCount} hidden${
+              result.errors.length ? ` (${result.errors.length} skipped)` : ''
+            }`,
+          })
+        } catch (err) {
+          console.error('Test generation failed:', err)
+          publish(problemId, {
+            phase: 'tests',
+            text: `Test generation failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          })
+        }
+
+        publish(problemId, { phase: 'tests', text: 'Generating C++ harness…' })
+        try {
+          const tmpl = await generateAndPersistCppTemplate({
+            problemId,
+            title: fetched.title,
+            statement: fetched.statement,
+            constraints: fetched.constraints,
+            examples: fetched.examples,
+            referenceCode: oracle.code,
+            provider,
+          })
+          publish(problemId, {
+            phase: 'tests',
+            text: tmpl.ok ? 'C++ harness ready' : `Harness generation failed: ${tmpl.error}`,
+          })
+        } catch (err) {
+          console.error('Harness generation failed:', err)
+          publish(problemId, {
+            phase: 'tests',
+            text: `Harness generation failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          })
+        }
+      }
+    }
+
     await updateProblem(problemId, {
       ingest_status: anyPassed ? 'ready' : 'needs_review',
     })

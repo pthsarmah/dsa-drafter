@@ -1,6 +1,7 @@
 import { writeFileSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import { spawn } from 'node:child_process'
 
 const TIMEOUT_MS = 8000
 
@@ -16,25 +17,33 @@ export async function runPython(code: string, stdinInput: string): Promise<RunRe
   try {
     writeFileSync(tmpPath, code, 'utf8')
 
-    const proc = Bun.spawn(['python3', tmpPath], {
-      stdin: new TextEncoder().encode(stdinInput),
-      stdout: 'pipe',
-      stderr: 'pipe',
+    const proc = spawn('python3', [tmpPath], { stdio: ['pipe', 'pipe', 'pipe'] })
+
+    let stdout = ''
+    let stderr = ''
+    proc.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString('utf8') })
+    proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString('utf8') })
+
+    proc.stdin.write(stdinInput)
+    proc.stdin.end()
+
+    let timedOut = false
+    const exitCode = await new Promise<number | null>((resolve) => {
+      const timer = setTimeout(() => {
+        timedOut = true
+        proc.kill('SIGKILL')
+        resolve(null)
+      }, TIMEOUT_MS)
+      proc.on('exit', (code) => { clearTimeout(timer); resolve(code) })
+      proc.on('error', () => { clearTimeout(timer); resolve(null) })
     })
 
-    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), TIMEOUT_MS))
-    const result = await Promise.race([proc.exited, timeout])
-
-    if (result === null) {
-      proc.kill()
+    if (timedOut) {
       return { passed: false, output: '', error: 'Timeout exceeded' }
     }
 
-    const stdout = await new Response(proc.stdout).text()
-    const stderr = await new Response(proc.stderr).text()
-
     return {
-      passed: proc.exitCode === 0,
+      passed: exitCode === 0,
       output: stdout.trim(),
       error: stderr.trim(),
     }

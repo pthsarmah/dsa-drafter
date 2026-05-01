@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { listProblemsWithProgress } from '@/lib/db/schema'
 import { IngestForm } from './ingest-form'
 import { IngestPoller } from './ingest-poller'
+import { ProblemRowActions } from './problem-row-actions'
 import type { IngestStatus } from '@/lib/types'
 
 const STATUS_STYLES: Record<IngestStatus, string> = {
@@ -81,7 +82,7 @@ export default async function Home({
 				</div>
 			</header>
 
-			<main className="max-w-5xl mx-auto px-8 py-16 space-y-20">
+			<main className="mx-auto px-48 py-16 space-y-20">
 				<section className="rise" style={{ animationDelay: '200ms' }}>
 					<IngestForm />
 					{ingestingId && (
@@ -105,8 +106,8 @@ export default async function Home({
 						<div className="border-t border-rule">
 							{problems.map((p, i) => {
 								const canOpen = p.ingest_status === 'ready' || p.ingest_status === 'needs_review'
-								const content = (
-									<div className="grid grid-cols-[44px_1fr_auto] items-baseline gap-6 py-6 border-b border-rule-soft group hover:bg-paper/50 transition-colors px-1 -mx-1">
+								const meta = (
+									<>
 										<span className="font-mono text-[14px] text-faint tabular-nums pt-1">
 											{String(i + 1).padStart(2, '0')}.
 										</span>
@@ -134,15 +135,23 @@ export default async function Home({
 												</span>
 											)}
 										</div>
-									</div>
+									</>
 								)
 
-								return canOpen ? (
-									<Link key={p.id} href={`/problem/${p.id}/draft`} className="block">
-										{content}
-									</Link>
-								) : (
-									<div key={p.id}>{content}</div>
+								return (
+									<div
+										key={p.id}
+										className="grid grid-cols-[44px_1fr_auto_auto] items-baseline gap-6 py-6 border-b border-rule-soft group hover:bg-paper/50 transition-colors px-1 -mx-1"
+									>
+										{canOpen ? (
+											<Link href={`/problem/${p.id}/draft`} className="contents">
+												{meta}
+											</Link>
+										) : (
+											meta
+										)}
+										<ProblemRowActions id={p.id} title={p.title || p.url} />
+									</div>
 								)
 							})}
 						</div>

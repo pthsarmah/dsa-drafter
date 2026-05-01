@@ -129,6 +129,133 @@ Review this solution critically. Return a JSON object with:
 - complexity_claims_match: boolean (true if claimed complexities are accurate)`
 }
 
+export function generateTestCasesPrompt(
+  title: string,
+  statement: string,
+  constraints: string,
+  examples: Example[],
+  referenceCode: string
+): string {
+  const exampleBlock = examples
+    .map((e, i) => `Example ${i + 1}:\nInput: ${e.input}\nOutput: ${e.output}`)
+    .join('\n\n')
+
+  return `You are generating ADDITIONAL hidden test inputs for a DSA problem. The reference solution is provided so you can match its function signature exactly.
+
+PROBLEM: ${title}
+
+STATEMENT:
+${statement}
+
+CONSTRAINTS:
+${constraints}
+
+VISIBLE EXAMPLES (already used as visible tests — do NOT duplicate):
+${exampleBlock}
+
+REFERENCE SOLUTION (for signature matching only — do NOT execute or replicate logic):
+${referenceCode}
+
+TASK:
+Generate 6 to 10 ADDITIONAL test inputs that exercise edge cases and varied sizes. These will be run through the reference solution to obtain canonical expected outputs — so the inputs MUST be valid per the constraints and MUST match the reference function signature.
+
+Each test input must be a JSON array. The elements of that array correspond, in order, to the parameters of the reference solution's \`solution(...)\` function. Match types exactly (a list parameter is a JSON array, a string parameter is a JSON string, etc.).
+
+Cover a mix:
+- Smallest valid input (e.g. single element, empty if allowed)
+- Boundary values at constraint extremes
+- All-same / all-distinct
+- Already-sorted / reverse-sorted (if order is meaningful)
+- Negative / zero / very large numbers (if allowed)
+- One medium-size random case
+
+Return a JSON object exactly in this shape:
+{
+  "tests": [
+    [<arg1>, <arg2>, ...],
+    [<arg1>, <arg2>, ...]
+  ]
+}
+
+Do NOT include expected outputs. Do NOT include explanations. Output JSON only.`
+}
+
+export function generateCppTemplatePrompt(
+  title: string,
+  statement: string,
+  constraints: string,
+  examples: Example[],
+  referenceCode: string
+): string {
+  const exampleBlock = examples
+    .map((e, i) => `Example ${i + 1}:\nInput: ${e.input}\nOutput: ${e.output}`)
+    .join('\n\n')
+
+  return `You are generating a LeetCode-style C++ scaffold for a DSA problem. The user will write ONLY the body of \`class Solution\`. You must produce two pieces:
+
+1. \`starter\` — what the user starts with: a \`class Solution { public: <signature> { ... } };\` skeleton with a TODO body.
+2. \`harness\` — a hidden \`int main()\` that reads a JSON array from stdin, unpacks it into the typed parameters, instantiates \`Solution\`, calls the method, and prints the JSON-encoded return value to stdout.
+
+PROBLEM: ${title}
+
+STATEMENT:
+${statement}
+
+CONSTRAINTS:
+${constraints}
+
+EXAMPLES:
+${exampleBlock}
+
+PYTHON REFERENCE (for inferring signature & types — do NOT translate logic):
+${referenceCode}
+
+A C++ prelude is automatically prepended to the compilation unit. You MAY assume these symbols already exist — do NOT redeclare or re-include them:
+- \`#include <bits/stdc++.h>\`, \`using namespace std;\`
+- \`#include "json.hpp"\`, \`using json = nlohmann::json;\`
+- \`struct TreeNode { int val; TreeNode *left, *right; ... };\` with all standard constructors
+- \`struct ListNode { int val; ListNode *next; ... };\` with all standard constructors
+- \`TreeNode* treeFromJson(const json&)\` — build tree from LeetCode level-order array (nulls allowed)
+- \`json treeToJson(TreeNode*)\` — serialize tree back to level-order JSON, trailing nulls stripped
+- \`ListNode* listFromJson(const json&)\` — build list from JSON array
+- \`json listToJson(ListNode*)\` — serialize list to JSON array
+
+TYPE MAPPING — map the Python signature to C++ idiomatically:
+- Python list of ints  → \`vector<int>\`
+- Python list of list of ints → \`vector<vector<int>>\`
+- Python list of strings → \`vector<string>\`
+- Python str → \`string\`
+- Python int → \`int\` (use \`long long\` if constraints exceed 2^31)
+- Python bool → \`bool\`
+- Python TreeNode (root) → \`TreeNode*\`
+- Python ListNode (head) → \`ListNode*\`
+- Tuple/list return → \`vector<...>\` or \`pair<...>\`
+
+STARTER REQUIREMENTS:
+- Exactly one \`class Solution { public: ... };\` with one public method.
+- Method signature must match the inferred types.
+- Body: a single \`// TODO: write your solution\` comment plus a sensible default \`return ...;\` so it compiles. The default return must be valid for the type (e.g. \`return {};\` for vectors, \`return 0;\` for int, \`return nullptr;\` for pointers, \`return "";\` for string, \`return false;\` for bool).
+- No \`#include\`, no \`using namespace\`, no \`int main\`. Just the class.
+
+HARNESS REQUIREMENTS:
+- Exactly one \`int main()\`.
+- Read all of stdin into a string, parse as \`json args\` (a JSON array).
+- Unpack \`args[0]\`, \`args[1]\`, … into the correctly-typed locals. For containers use \`auto x = args[i].get<vector<int>>();\` style. For TreeNode/ListNode use the helpers (\`treeFromJson(args[i])\`, \`listFromJson(args[i])\`).
+- Instantiate \`Solution sol;\` and call the method with the unpacked arguments.
+- Convert the return to \`json\` and print with \`cout << result.dump();\`. For TreeNode*/ListNode* returns use \`treeToJson\` / \`listToJson\`. For primitive/container returns, direct \`json\` conversion via \`json result = sol.method(...);\` works.
+- No prompts, no extra output, no trailing newline beyond what \`dump()\` produces.
+
+Return a JSON object EXACTLY in this shape:
+{
+  "method_name": "Solution::methodName",
+  "starter": "class Solution {\\npublic:\\n    ReturnType methodName(...) {\\n        // TODO: write your solution\\n        return ...;\\n    }\\n};\\n",
+  "harness": "int main() {\\n    string raw((istreambuf_iterator<char>(cin)), istreambuf_iterator<char>());\\n    auto args = json::parse(raw);\\n    ...\\n    Solution sol;\\n    auto result = sol.methodName(...);\\n    cout << json(result).dump();\\n    return 0;\\n}\\n",
+  "notes": "1-2 short sentences explaining the I/O shape — e.g. 'args is [nums, target]; output is the index pair.'"
+}
+
+Output JSON only. No markdown fences, no commentary.`
+}
+
 export const COACH_SYSTEM = `You are a DSA drafting coach. Your job is to help students think through a problem before writing code, without ever giving away the answer.
 
 You have access to verified reference solutions for this problem. Use them as your oracle — but NEVER reveal them.

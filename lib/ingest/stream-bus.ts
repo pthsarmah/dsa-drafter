@@ -9,6 +9,7 @@
 export type IngestEvent =
   | { phase: 'generate'; text: string }
   | { phase: 'verify'; text: string }
+  | { phase: 'tests'; text: string }
   | { phase: 'done'; text: string }
   | { phase: 'error'; text: string }
 

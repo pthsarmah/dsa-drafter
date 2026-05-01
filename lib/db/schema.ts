@@ -1,5 +1,19 @@
 import { getDb } from './client'
-import type { Problem, ProblemWithProgress, ReferenceSolution, Draft, DraftSection, IngestStatus, Verdict, Example } from '@/lib/types'
+import type {
+  Problem,
+  ProblemWithProgress,
+  ReferenceSolution,
+  Draft,
+  DraftSection,
+  IngestStatus,
+  Verdict,
+  Example,
+  ProblemTest,
+  CodeDraft,
+  CppTemplate,
+  Submission,
+  SubmissionVerdict,
+} from '@/lib/types'
 
 type BindValue = string | number | bigint | boolean | null | Uint8Array
 type Bindings = Record<string, BindValue>
@@ -52,6 +66,21 @@ export async function listProblems(): Promise<Problem[]> {
   const db = await getDb()
   const rows = await db.all<Record<string, unknown>>(`SELECT * FROM problems ORDER BY created_at DESC`)
   return rows.map(rowToProblem)
+}
+
+export async function deleteProblem(id: number): Promise<void> {
+  const db = await getDb()
+  await db.run(`DELETE FROM problems WHERE id = $id`, { $id: id })
+}
+
+export async function clearProblemArtifacts(id: number): Promise<void> {
+  const db = await getDb()
+  await db.run(`DELETE FROM reference_solutions WHERE problem_id = $id`, { $id: id })
+  await db.run(`DELETE FROM drafts WHERE problem_id = $id`, { $id: id })
+  await db.run(`DELETE FROM problem_tests WHERE problem_id = $id`, { $id: id })
+  await db.run(`DELETE FROM code_drafts WHERE problem_id = $id`, { $id: id })
+  await db.run(`DELETE FROM submissions WHERE problem_id = $id`, { $id: id })
+  await db.run(`DELETE FROM problem_cpp_templates WHERE problem_id = $id`, { $id: id })
 }
 
 export async function listProblemsWithProgress(): Promise<ProblemWithProgress[]> {
@@ -210,6 +239,191 @@ export async function updateSectionVerdict(
   `, { $draft_id: draftId, $section_key: sectionKey, $verdict: verdict, $hint: hint, $followup: followup })
 
   await db.run(`UPDATE drafts SET updated_at = unixepoch() WHERE id = $id`, { $id: draftId })
+}
+
+export async function setCodeCompleted(draftId: number, completed: boolean) {
+  const db = await getDb()
+  await db.run(`UPDATE drafts SET code_completed = $v, updated_at = unixepoch() WHERE id = $id`, {
+    $id: draftId,
+    $v: completed ? 1 : 0,
+  })
+}
+
+// Problem tests
+
+export async function insertProblemTest(
+  problemId: number,
+  t: { visible: boolean; input_json: string; expected_json: string; ord: number }
+): Promise<number> {
+  const db = await getDb()
+  await db.run(
+    `INSERT INTO problem_tests (problem_id, visible, input_json, expected_json, ord)
+     VALUES ($problem_id, $visible, $input_json, $expected_json, $ord)`,
+    {
+      $problem_id: problemId,
+      $visible: t.visible ? 1 : 0,
+      $input_json: t.input_json,
+      $expected_json: t.expected_json,
+      $ord: t.ord,
+    }
+  )
+  const row = await db.get<{ id: number }>(`SELECT last_insert_rowid() as id`)
+  return row!.id
+}
+
+export async function getProblemTests(problemId: number): Promise<ProblemTest[]> {
+  const db = await getDb()
+  const rows = await db.all<Record<string, unknown>>(
+    `SELECT * FROM problem_tests WHERE problem_id = $problem_id ORDER BY visible DESC, ord ASC, id ASC`,
+    { $problem_id: problemId }
+  )
+  return rows.map(rowToProblemTest)
+}
+
+export async function deleteProblemTests(problemId: number): Promise<void> {
+  const db = await getDb()
+  await db.run(`DELETE FROM problem_tests WHERE problem_id = $problem_id`, { $problem_id: problemId })
+}
+
+export async function getVisibleTests(problemId: number): Promise<ProblemTest[]> {
+  const db = await getDb()
+  const rows = await db.all<Record<string, unknown>>(
+    `SELECT * FROM problem_tests WHERE problem_id = $problem_id AND visible = 1 ORDER BY ord ASC, id ASC`,
+    { $problem_id: problemId }
+  )
+  return rows.map(rowToProblemTest)
+}
+
+function rowToProblemTest(row: Record<string, unknown>): ProblemTest {
+  return {
+    id: row.id as number,
+    problem_id: row.problem_id as number,
+    visible: Boolean(row.visible),
+    input_json: row.input_json as string,
+    expected_json: row.expected_json as string,
+    ord: row.ord as number,
+  }
+}
+
+// Code drafts
+
+export async function upsertCodeDraft(problemId: number, code: string) {
+  const db = await getDb()
+  await db.run(
+    `INSERT INTO code_drafts (problem_id, language, code, updated_at)
+     VALUES ($problem_id, 'cpp', $code, unixepoch())
+     ON CONFLICT(problem_id) DO UPDATE SET code = $code, updated_at = unixepoch()`,
+    { $problem_id: problemId, $code: code }
+  )
+}
+
+export async function getCodeDraft(problemId: number): Promise<CodeDraft | null> {
+  const db = await getDb()
+  const row = await db.get<Record<string, unknown>>(
+    `SELECT * FROM code_drafts WHERE problem_id = $problem_id`,
+    { $problem_id: problemId }
+  )
+  if (!row) return null
+  return {
+    problem_id: row.problem_id as number,
+    language: 'cpp',
+    code: row.code as string,
+    updated_at: row.updated_at as number,
+  }
+}
+
+// C++ template (per-problem starter + harness)
+
+export async function upsertCppTemplate(t: {
+  problem_id: number
+  method_name: string
+  starter: string
+  harness: string
+  notes: string
+}) {
+  const db = await getDb()
+  await db.run(
+    `INSERT INTO problem_cpp_templates (problem_id, method_name, starter, harness, notes)
+     VALUES ($problem_id, $method_name, $starter, $harness, $notes)
+     ON CONFLICT(problem_id) DO UPDATE SET
+       method_name = $method_name,
+       starter = $starter,
+       harness = $harness,
+       notes = $notes`,
+    {
+      $problem_id: t.problem_id,
+      $method_name: t.method_name,
+      $starter: t.starter,
+      $harness: t.harness,
+      $notes: t.notes,
+    }
+  )
+}
+
+export async function getCppTemplate(problemId: number): Promise<CppTemplate | null> {
+  const db = await getDb()
+  const row = await db.get<Record<string, unknown>>(
+    `SELECT * FROM problem_cpp_templates WHERE problem_id = $problem_id`,
+    { $problem_id: problemId }
+  )
+  if (!row) return null
+  return {
+    problem_id: row.problem_id as number,
+    method_name: row.method_name as string,
+    starter: row.starter as string,
+    harness: row.harness as string,
+    notes: row.notes as string,
+  }
+}
+
+// Submissions
+
+export async function insertSubmission(s: {
+  problem_id: number
+  code: string
+  verdict: SubmissionVerdict
+  passed_count: number
+  total_count: number
+  compile_error: string
+  runtime_ms: number
+}): Promise<number> {
+  const db = await getDb()
+  await db.run(
+    `INSERT INTO submissions (problem_id, language, code, verdict, passed_count, total_count, compile_error, runtime_ms)
+     VALUES ($problem_id, 'cpp', $code, $verdict, $passed_count, $total_count, $compile_error, $runtime_ms)`,
+    {
+      $problem_id: s.problem_id,
+      $code: s.code,
+      $verdict: s.verdict,
+      $passed_count: s.passed_count,
+      $total_count: s.total_count,
+      $compile_error: s.compile_error,
+      $runtime_ms: s.runtime_ms,
+    }
+  )
+  const row = await db.get<{ id: number }>(`SELECT last_insert_rowid() as id`)
+  return row!.id
+}
+
+export async function getLatestSubmission(problemId: number): Promise<Submission | null> {
+  const db = await getDb()
+  const row = await db.get<Record<string, unknown>>(
+    `SELECT * FROM submissions WHERE problem_id = $problem_id ORDER BY created_at DESC, id DESC LIMIT 1`,
+    { $problem_id: problemId }
+  )
+  if (!row) return null
+  return {
+    id: row.id as number,
+    problem_id: row.problem_id as number,
+    language: 'cpp',
+    code: row.code as string,
+    verdict: row.verdict as SubmissionVerdict,
+    passed_count: row.passed_count as number,
+    total_count: row.total_count as number,
+    compile_error: row.compile_error as string,
+    runtime_ms: row.runtime_ms as number,
+    created_at: row.created_at as number,
+  }
 }
 
 export async function getSections(draftId: number): Promise<DraftSection[]> {

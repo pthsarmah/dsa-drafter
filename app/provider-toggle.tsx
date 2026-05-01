@@ -12,18 +12,11 @@ export function getStoredProvider(): ModelProvider {
 }
 
 export function useProvider(): [ModelProvider, (p: ModelProvider) => void] {
-  const [provider, setProviderState] = useState<ModelProvider>('cloud')
-  const [hydrated, setHydrated] = useState(false)
+  const [provider, setProviderState] = useState<ModelProvider>(getStoredProvider)
 
   useEffect(() => {
-    setProviderState(getStoredProvider())
-    setHydrated(true)
-  }, [])
-
-  useEffect(() => {
-    if (!hydrated) return
     window.localStorage.setItem(STORAGE_KEY, provider)
-  }, [provider, hydrated])
+  }, [provider])
 
   return [provider, setProviderState]
 }

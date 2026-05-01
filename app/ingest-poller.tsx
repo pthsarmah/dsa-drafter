@@ -21,7 +21,7 @@ export function IngestPoller({ problemId }: Props) {
   const [elapsed, setElapsed] = useState(0)
   const [streamText, setStreamText] = useState('')
   const [verifyText, setVerifyText] = useState('')
-  const startedAt = useRef<number>(Date.now())
+  const startedAt = useRef<number>(0)
   const streamBoxRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
 

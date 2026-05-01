@@ -2,7 +2,11 @@ import { open } from 'sqlite'
 import { mkdirSync } from 'fs'
 import { join } from 'path'
 
-let _db: any = null
+let _db: Awaited<ReturnType<typeof open>> | null = null
+
+async function loadDriver(): Promise<typeof import('sqlite3')> {
+  return import('sqlite3')
+}
 
 export async function getDb() {
   if (_db) return _db
@@ -10,9 +14,10 @@ export async function getDb() {
   const DATA_DIR = join(process.cwd(), '.data')
   mkdirSync(DATA_DIR, { recursive: true })
 
+  const sqlite3 = await loadDriver()
   const db = await open({
     filename: join(DATA_DIR, 'app.db'),
-    driver: require('sqlite3').Database,
+    driver: sqlite3.Database,
   })
 
   await db.run('PRAGMA foreign_keys = ON')
@@ -89,6 +94,55 @@ export async function getDb() {
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     )
   `)
+
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS problem_tests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      problem_id INTEGER NOT NULL REFERENCES problems(id) ON DELETE CASCADE,
+      visible INTEGER NOT NULL DEFAULT 0,
+      input_json TEXT NOT NULL,
+      expected_json TEXT NOT NULL,
+      ord INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `)
+  await db.run(`CREATE INDEX IF NOT EXISTS idx_problem_tests_problem ON problem_tests(problem_id)`)
+
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS code_drafts (
+      problem_id INTEGER PRIMARY KEY REFERENCES problems(id) ON DELETE CASCADE,
+      language TEXT NOT NULL DEFAULT 'cpp',
+      code TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `)
+
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS problem_cpp_templates (
+      problem_id INTEGER PRIMARY KEY REFERENCES problems(id) ON DELETE CASCADE,
+      method_name TEXT NOT NULL,
+      starter TEXT NOT NULL,
+      harness TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `)
+
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS submissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      problem_id INTEGER NOT NULL REFERENCES problems(id) ON DELETE CASCADE,
+      language TEXT NOT NULL DEFAULT 'cpp',
+      code TEXT NOT NULL,
+      verdict TEXT NOT NULL,
+      passed_count INTEGER NOT NULL DEFAULT 0,
+      total_count INTEGER NOT NULL DEFAULT 0,
+      compile_error TEXT NOT NULL DEFAULT '',
+      runtime_ms INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `)
+  await db.run(`CREATE INDEX IF NOT EXISTS idx_submissions_problem ON submissions(problem_id, created_at DESC)`)
 
   _db = db
   return db

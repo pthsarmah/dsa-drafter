@@ -92,7 +92,7 @@ async function runTestCases(code: string, examples: Example[]): Promise<{ passed
   }
 }
 
-function parseExampleInput(input: string): unknown[] {
+export function parseExampleInput(input: string): unknown[] {
   // Try to parse "key = value, key = value" format
   // Extract just the values, in order
   const valueRegex = /=\s*(\[[\s\S]*?\]|"[^"]*"|-?\d+(?:\.\d+)?|true|false|null)/g
