@@ -63,34 +63,49 @@ export function CodeWorkspace({
     }
   }
 
-  async function regenTests() {
+  async function regen(scope: 'tests' | 'harness' | 'all') {
     if (regenPending || pending) return
-    if (!confirm('Wipe existing tests and regenerate hidden cases via the model? Takes ~30s.')) return
+    const prompts: Record<typeof scope, string> = {
+      tests: 'Wipe existing tests and regenerate hidden cases via the model? Takes ~30s.',
+      harness: 'Generate the C++ harness for this problem? Takes ~15s.',
+      all: 'Wipe tests and rebuild both tests and harness? Takes ~45s.',
+    }
+    if (!confirm(prompts[scope])) return
     setRegenPending(true)
     setRegenInfo('')
     setError('')
     try {
-      const res = await fetch('/api/code/regen-tests', {
+      const res = await fetch('/api/code/regen-artifacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ problemId }),
+        body: JSON.stringify({ problemId, scope }),
       })
       const data = (await res.json()) as {
         ok?: boolean
+        scope?: typeof scope
         visibleCount?: number
         hiddenCount?: number
         errors?: string[]
+        harnessOk?: boolean
+        harnessError?: string
         error?: string
       }
       if (!res.ok || !data.ok) {
         setError(data.error ?? 'Regen failed')
+      } else if (data.harnessOk === false) {
+        setError(`Harness generation failed: ${data.harnessError ?? 'unknown error'}`)
       } else {
-        const skipped = data.errors?.length ?? 0
-        setRegenInfo(
-          `Tests regenerated — ${data.visibleCount ?? 0} visible, ${data.hiddenCount ?? 0} hidden${
-            skipped ? ` (${skipped} skipped)` : ''
-          }`
-        )
+        const parts: string[] = []
+        if (scope === 'tests' || scope === 'all') {
+          const skipped = data.errors?.length ?? 0
+          parts.push(
+            `tests: ${data.visibleCount ?? 0} visible, ${data.hiddenCount ?? 0} hidden${
+              skipped ? ` (${skipped} skipped)` : ''
+            }`
+          )
+        }
+        if (scope === 'harness' || scope === 'all') parts.push('harness: ready')
+        setRegenInfo(`Rebuilt — ${parts.join(' · ')}`)
         startTransition(() => router.refresh())
       }
     } catch {
@@ -131,9 +146,19 @@ export function CodeWorkspace({
               Last: {latestVerdict.replace('_', ' ')}
             </span>
           )}
+          {!harnessReady && (
+            <button
+              type="button"
+              onClick={() => regen('harness')}
+              disabled={regenPending || pending}
+              className="text-honey hover:text-amber disabled:cursor-not-allowed transition-colors"
+            >
+              {regenPending ? 'Building…' : 'Build harness'}
+            </button>
+          )}
           <button
             type="button"
-            onClick={regenTests}
+            onClick={() => regen('tests')}
             disabled={regenPending || pending}
             className="text-faint hover:text-amber disabled:cursor-not-allowed transition-colors"
           >

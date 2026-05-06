@@ -175,7 +175,7 @@ export default async function CodePage({
               )}
               {!harnessReady && (
                 <p className="text-honey">
-                  Harness not generated yet — re-ingest the problem to enable Run/Submit.
+                  Harness not generated yet — click <span className="text-amber">Build harness</span> above to enable Run/Submit.
                 </p>
               )}
             </div>
