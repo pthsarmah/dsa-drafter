@@ -64,7 +64,7 @@ export async function getProblem(id: number): Promise<Problem | null> {
 
 export async function listProblems(): Promise<Problem[]> {
   const db = await getDb()
-  const rows = await db.all<Record<string, unknown>>(`SELECT * FROM problems ORDER BY created_at DESC`)
+  const rows = await db.all<Record<string, unknown>[]>(`SELECT * FROM problems ORDER BY created_at DESC`)
   return rows.map(rowToProblem)
 }
 
@@ -85,7 +85,7 @@ export async function clearProblemArtifacts(id: number): Promise<void> {
 
 export async function listProblemsWithProgress(): Promise<ProblemWithProgress[]> {
   const db = await getDb()
-  const rows = await db.all<Record<string, unknown>>(`
+  const rows = await db.all<Record<string, unknown>[]>(`
     SELECT p.*,
       COALESCE(d.gate_passed, 0) AS gate_passed,
       COALESCE(d.code_completed, 0) AS code_completed
@@ -152,7 +152,7 @@ export async function insertReferenceSolution(
 
 export async function getReferenceSolutions(problemId: number): Promise<ReferenceSolution[]> {
   const db = await getDb()
-  const rows = await db.all<Record<string, unknown>>(
+  const rows = await db.all<Record<string, unknown>[]>(
     `SELECT * FROM reference_solutions WHERE problem_id = $problem_id AND critic_ok = 1`,
     { $problem_id: problemId }
   )
@@ -178,7 +178,7 @@ export async function getOrCreateDraft(problemId: number): Promise<Draft> {
   const db = await getDb()
   await db.run(`INSERT OR IGNORE INTO drafts (problem_id) VALUES ($problem_id)`, { $problem_id: problemId })
   const row = await db.get<Record<string, unknown>>(`SELECT * FROM drafts WHERE problem_id = $problem_id`, { $problem_id: problemId })
-  return rowToDraft(row)
+  return rowToDraft(row!)
 }
 
 export async function getDraft(problemId: number): Promise<Draft | null> {
@@ -273,7 +273,7 @@ export async function insertProblemTest(
 
 export async function getProblemTests(problemId: number): Promise<ProblemTest[]> {
   const db = await getDb()
-  const rows = await db.all<Record<string, unknown>>(
+  const rows = await db.all<Record<string, unknown>[]>(
     `SELECT * FROM problem_tests WHERE problem_id = $problem_id ORDER BY visible DESC, ord ASC, id ASC`,
     { $problem_id: problemId }
   )
@@ -287,7 +287,7 @@ export async function deleteProblemTests(problemId: number): Promise<void> {
 
 export async function getVisibleTests(problemId: number): Promise<ProblemTest[]> {
   const db = await getDb()
-  const rows = await db.all<Record<string, unknown>>(
+  const rows = await db.all<Record<string, unknown>[]>(
     `SELECT * FROM problem_tests WHERE problem_id = $problem_id AND visible = 1 ORDER BY ord ASC, id ASC`,
     { $problem_id: problemId }
   )
@@ -428,7 +428,7 @@ export async function getLatestSubmission(problemId: number): Promise<Submission
 
 export async function getSections(draftId: number): Promise<DraftSection[]> {
   const db = await getDb()
-  const rows = await db.all<Record<string, unknown>>(`SELECT * FROM draft_sections WHERE draft_id = $draft_id`, { $draft_id: draftId })
+  const rows = await db.all<Record<string, unknown>[]>(`SELECT * FROM draft_sections WHERE draft_id = $draft_id`, { $draft_id: draftId })
   return rows.map((row) => ({
     draft_id: row.draft_id as number,
     section_key: row.section_key as string,
