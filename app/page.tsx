@@ -71,7 +71,7 @@ export default async function Home({
 
 					<h1 className="font-display text-[clamp(3.5rem,9vw,7rem)] leading-[0.9] text-cream tracking-tight rise">
 						Think<span className="text-amber">,</span>
-						<span className="italic text-muted block">then execute.</span>
+						<span className="italic text-muted block">then write.</span>
 					</h1>
 
 					<p className="text-sm text-muted max-w-lg mt-10 leading-relaxed rise" style={{ animationDelay: '120ms' }}>
